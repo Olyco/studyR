@@ -1,0 +1,75 @@
+---
+title: "Лабораторная работа 1"
+author: "Ковалёва Ольга"
+output:
+  html_document:
+    df_print: paged
+---
+
+## Задание 1
+```{r}
+
+data1 <- read.csv('lab1_e1.csv', sep = ',')
+data1
+```
+```{r}
+fix_data <- function(data){
+  # Рассмотрим каждый столбец
+  for (name in colnames(data)) {
+    
+    # Получим столбец без пробелов
+    values_without_gap <- gsub(" ", "", data[[name]])
+    
+    # Приведем строковый тип к числовому
+    numeric_column_values <- suppressWarnings(as.numeric(values_without_gap))
+    if (!(NA %in% numeric_column_values)) # Если приведение к числовому типу возможно, записываем numeric столбец
+      data[[name]] <- numeric_column_values
+    # Иначе(вернулось NA) оставляем столбец типа character 
+  }
+  return(data)
+}
+
+```
+
+```{r}
+fixed_data <- fix_data(data1)
+fixed_data
+```
+
+В результате столбцы 1, 3, 5 содержат исправленные числа и имеют тип double.
+
+## Задание 2
+```{r}
+data2 <- get(load('lab1_e2.Rdata'))
+str(data2)
+```
+
+Имеем список из датафреймов, каждый соответствует одному из 7 дней.
+
+```{r}
+get_id <- function(data){
+  all_days <- do.call("rbind", data)
+  
+  # Найдем id порядочных пациентов
+  frequency <- setNames(aggregate(temp ~ id, all_days, length), c("id", "temp_freq"))
+  good_patients <- frequency[frequency$temp_freq == 7, ][1]
+  
+  # Вычислим среднюю температуру всех пациентов
+  mean_temp <- setNames(aggregate(temp ~ id, all_days, mean), c("id", "mean_temp"))
+  
+  # Выберем только порядочных
+  res <- mean_temp[mean_temp$id %in% unlist(good_patients), ]
+  names(res)[1] <- "good_id"
+  
+  return(res)
+}
+```
+
+Получим датафрейм, содержащий значения средней температуры пациентов, исправно отмечавшихся на каждом приеме. 
+
+```{r}
+res <- get_id(data2)
+res
+```
+
+
