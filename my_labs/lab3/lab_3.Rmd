@@ -1,0 +1,145 @@
+---
+title: "Лабораторная работа 3"
+author: "Ковалёва Ольга"
+output:
+  html_document:
+    df_print: paged
+---
+
+## Задание 3
+trades.RData Объедините таблицы в одну, уберите столбец с территорией торговли, т.к. там только Евросоюз, оставим только строки с экспортом и импортом, вынесете данные по экспорту и импорту в отдельные переменные. Постройте линейный график изменения экспорта по годам просуммировав разные группы экспортируемых товаров. Подпишите значения на графике. Для минимального значения сделайте подпись красным цветом. Отрегулируйте местоположение подписей так, чтобы рисунок был максимально наглядным. Придумайте новые названия графика и осей.
+
+```{r message=FALSE, warning=FALSE}
+library(ggplot2)
+library(tidyverse)
+```
+Читаем данные и убираем столбец с территорей торговли.
+```{r}
+library(dplyr)
+data <- get(load('trades.Rdata'))
+data <- bind_rows(data)[ , -3]
+data[1:20, ]
+```
+Заметим, что строки с импортом и экспортом можно выделить по подстрокам "Imports in|Exports in".
+```{r}
+data <- data[str_detect(data$indic_et, "Imports in|Exports in"), ]
+```
+Выносим данные по экспорту и импорту в отдельные переменные.
+```{r}
+dat_wide <- pivot_wider(data, names_from = indic_et, values_from = values)
+head(dat_wide)
+```
+Суммируем разные группы экспортируемых товаров по годам.
+```{r}
+group_sum <- aggregate(dat_wide[[4]], list(dat_wide$time), sum)
+names(group_sum) <- c("Time", "Sum.Exp")
+group_sum
+```
+Находим координаты ячейки, содержащей минимальный экспорт, вычитаем соответствующую строку, чтобы остальные данные обозначить на графике одинаково.
+```{r}
+# [min_row_num, min_col_num]
+min_exp_ind <- which(group_sum == min(group_sum[["Sum.Exp"]]), arr.ind = TRUE)
+same_aes <- group_sum[-min_exp_ind, ]
+```
+Строим график.
+```{r}
+ggplot(group_sum, aes(x = Time, y = Sum.Exp)) + geom_line() + geom_point() +
+  geom_text(data = same_aes, aes(x = Time, y = Sum.Exp, label = Sum.Exp),
+            vjust = 0, hjust=1, nudge_x = 100, nudge_y = 33000, size = 2.5, check_overlap = TRUE) +
+  geom_point(data = group_sum, aes(x = group_sum[min_exp_ind[1,1], min_exp_ind[1,2] - 1],
+                                   y = group_sum[min_exp_ind[1,1], min_exp_ind[1,2]]),
+             size = 8, shape = "*", color = "red") +
+  geom_text(data = group_sum[min_exp_ind[1,1], ], aes(x = Time, y = Sum.Exp, label = Sum.Exp),
+            color = "red", size = 2.5, vjust = 0, hjust = 1, nudge_x = 100, nudge_y = -33000) +
+  labs(title = "Export changes by years", x = "Year", y = "Total exports for different product groups")
+```
+
+## Задание 12
+data2.csv, data1.txt Объедините data.frames по идентификаторам сортов. Исключите те сорта, для которых есть пропущенные значения. Для всех количественных величин нарисовать гистограммы и плотности распределения (на одном рисунке). Выбрать одну количественную и две качественные переменные . Нарисовать столбчатую диаграмму в которой значениям на оси x соответствуют значения одной кач.переменной и значения другой кач. переменной показаны при помощи цвета. Для количественной переменной нарисовать график плотности и гистограмму(в 2 слоя) на одном графике, и boxplot - на другом.
+```{r}
+data1 <- read.table(file = "data1.txt")
+data2 <- read.csv('data2.csv', sep = ',')
+```
+Исправляем данные по аналогии с лабораторной 2.
+```{r}
+colnames(data1) <- data1[1, ]
+data1 <- data1[-1, ] 
+head(data1)
+```
+```{r}
+data2 <- as.data.frame(t(data2))
+colnames(data2) <- data2[1, ]
+data2 <- data2[-1, ] 
+head(data2)
+
+fix_data2 <- function(data){
+  for (name in colnames(data)) {
+    data[[name]] <- gsub(" ", "", data[[name]])
+  }
+  return(data)
+}
+
+data2 <- fix_data2(data2)
+```
+Объединяем датафреймы.
+```{r}
+merged_df <- cbind(data1,data2)
+
+withoutNA <- na.omit(merged_df) 
+rownames(withoutNA) <- 1:nrow(withoutNA)
+withoutNA[ , -1] <- as.data.frame(lapply(withoutNA[ , -1], as.numeric))
+
+# Упорядочим столбцы
+withoutNA <- select(withoutNA, Sample, GenmBMatur, everything())
+head(withoutNA)
+```
+Для наглядности разделим количественные переменные на две группы: GenmBMatur и Height, Protein и Oil. Построим гистограммы и графики плотностей. Для этого приведем данные к виду необходимому для построения подграфиков.
+```{r}
+dat_long1 <- pivot_longer(withoutNA, GenmBMatur:Height, names_to = "Feature", values_to = "Values")
+
+ggplot(dat_long1, aes(x = Values)) +
+  geom_histogram(fill = "grey20", col = "white", binwidth = 5) +
+  facet_wrap("Feature") +
+  labs(title = "Sample histogram", x = "Feature values", y = "Count of values")
+```
+
+```{r}
+ggplot(dat_long1, aes(x = Values)) + geom_density(alpha = 0.2, fill = "yellow") +
+  facet_wrap("Feature") +
+  labs(title = "Sample density", x = "Feature values", y = "Density")
+```
+
+Аналогично для второй группы количественных переменных.
+```{r}
+dat_long2 <- pivot_longer(withoutNA, Protein:Oil, names_to = "Feature", values_to = "Values")
+
+ggplot(dat_long2, aes(x = Values)) +
+  geom_histogram(fill = "grey20", col = "white", binwidth=1) +
+  facet_wrap("Feature") +
+  labs(title = "Sample histogram", x = "Feature values", y = "Count of values")
+```
+```{r}
+ggplot(dat_long2, aes(x = Values)) + geom_density(alpha = 0.2, fill = "yellow") +
+  facet_wrap("Feature") +
+  labs(title = "Sample density", x = "Feature values", y = "Density")
+```
+
+Выберем две качественные переменные: MaturType, GrowthType. Построим столбчатую диаграмму. По оси х отложим значения переменной MaturType, столбцы окрасим группируя по GrowthType.
+```{r}
+withoutNA$GrowthType <- as.factor(withoutNA$GrowthType)
+ggplot(withoutNA, aes(x = MaturType, fill = GrowthType)) +
+  geom_histogram(col = "white", binwidth = 1) + 
+  labs(title = "Distribution GrowthType for each MaturType", x = "MaturType values", y = "Count of MaturType values")
+```
+
+Для количественной переменной Oil построим гистограмму и плотность распределения на одном графике, а также боксплот.
+```{r}
+ggplot(withoutNA, aes(x = Oil)) +
+  geom_histogram(aes(y = after_stat(density)), alpha = 0.9, fill = "grey20", col = "white", binwidth = 0.5) +
+  geom_density(alpha = 0.2, fill = "yellow") +
+  labs(title = "Oil sample histogram, density", x = "Oil values", y = "Density values")
+```
+```{r}
+ggplot(withoutNA, aes(y = Oil)) + geom_boxplot(fill='#de3163', color="black") +
+  labs(title = "Oil sample boxplot", y = "Oil values")
+```
